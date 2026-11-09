@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数字华容道 4×4</title>
+<style>
+  :root {
+    --bg: #f2f0eb;
+    --panel: #ffffff;
+    --ink: #2b2b28;
+    --muted: #8a887f;
+    --accent: #c0563e;
+    --tile: #faf8f4;
+    --tile-border: #d8d4ca;
+    --shadow: 0 2px 6px rgba(60,55,45,.10);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 16px 40px;
+  }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: 2px; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+
+  .panel {
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px;
+    width: min(92vw, 460px);
+  }
+
+  /* 顶部信息条 */
+  .hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .hud .item { text-align: center; }
+  .hud .label { font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+  .hud .value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hud .value.best { color: var(--accent); font-size: 18px; padding-top: 4px; }
+
+  /* 棋盘 */
+  .board-wrap { position: relative; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    background: #e8e4da;
+    border-radius: var(--radius);
+    padding: 10px;
+  }
+  .tile {
+    aspect-ratio: 1;
+    background: var(--tile);
+    border: 1px solid var(--tile-border);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(22px, 7vw, 34px);
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    transition: transform .12s ease, background .15s ease, opacity .15s;
+    box-shadow: 0 1px 3px rgba(60,55,45,.08);
+  }
+  .tile:hover { background: #fff; transform: translateY(-2px); }
+  .tile.correct { color: var(--accent); }
+  .tile.empty { visibility: hidden; }
+  .tile.anim { transform: scale(.92); }
+
+  /* 按钮 */
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  button {
+    flex: 1;
+    padding: 12px 0;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+    font-family: inherit;
+  }
+  button:active { transform: scale(.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--tile-border); }
+
+  /* 胜利提示 */
+  .win-mask {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,.88);
+    backdrop-filter: blur(2px);
+    border-radius: var(--radius);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    z-index: 5;
+  }
+  .win-mask.show { display: flex; animation: pop .35s ease; }
+  @keyframes pop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+  .win-mask .big { font-size: 30px; font-weight: 800; color: var(--accent); letter-spacing: 4px; }
+  .win-mask .time { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .win-mask .newbest { font-size: 13px; color: var(--muted); }
+  .win-mask button { flex: none; padding: 10px 28px; margin-top: 8px; }
+
+  /* 出题面板 */
+  .editor { display: none; margin-top: 16px; border-top: 1px dashed var(--tile-border); padding-top: 14px; }
+  .editor.show { display: block; }
+  .editor h3 { font-size: 15px; margin-bottom: 4px; }
+  .editor .tip { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.6; }
+  .edit-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .cell {
+    aspect-ratio: 1;
+    border: 1.5px solid var(--tile-border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    background: var(--tile);
+  }
+  .cell.selected { border-color: var(--accent); color: var(--accent); }
+  .cell.blank { background: #e8e4da; color: var(--muted); font-size: 14px; }
+  .num-palette {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .num {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 1px solid var(--tile-border);
+    background: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .num.used { opacity: .3; text-decoration: line-through; pointer-events: none; }
+  .num.zero { color: var(--muted); font-size: 12px; }
+  .edit-actions { display: flex; gap: 10px; }
+  .edit-actions button { font-size: 14px; padding: 10px 0; }
+  .edit-msg { font-size: 13px; margin-top: 10px; min-height: 18px; text-align: center; }
+  .edit-msg.ok { color: #2e7d32; }
+  .edit-msg.err { color: var(--accent); }
+
+  .record-note { margin-top: 12px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>数字华容道</h1>
+<div class="subtitle">4 × 4 · 点方块移动，还原 1 → 15 即获胜</div>
+
+<div class="panel">
+  <div class="hud">
+    <div class="item"><div class="label">用时</div><div class="value" id="timer">00:00.0</div></div>
+    <div class="item"><div class="label">步数</div><div class="value" id="moves">0</div></div>
+    <div class="item"><div class="label">最佳纪录</div><div class="value best" id="best">—</div></div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="win-mask" id="winMask">
+      <div class="big">完 成</div>
+      <div class="time" id="winTime"></div>
+      <div class="newbest" id="winBest"></div>
+      <button class="btn-primary" id="btnAgain">再来一局</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn-primary" id="btnShuffle">随机打乱</button>
+    <button class="btn-ghost" id="btnEditor">手动出题</button>
+  </div>
+
+  <!-- 手动出题面板 -->
+  <div class="editor" id="editor">
+    <h3>手动出题</h3>
+    <div class="tip">先点选下方格子，再从数字键盘填入 1–15；「空」代表空格。每个数字只能用一次，题目必须可解。</div>
+    <div class="edit-grid" id="editGrid"></div>
+    <div class="num-palette" id="numPalette"></div>
+    <div class="edit-actions">
+      <button class="btn-ghost" id="btnEditClear">清空</button>
+      <button class="btn-ghost" id="btnEditSolved">已还原局面</button>
+      <button class="btn-primary" id="btnEditApply">应用出题</button>
+    </div>
+    <div class="edit-msg" id="editMsg"></div>
+  </div>
+
+  <div class="record-note" id="recordNote"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var N = 4, SIZE = 16;
+  var SOLVED = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,0];
+
+  var state = {
+    board: SOLVED.slice(),
+    moves: 0,
+    startTime: null,
+    timerId: null,
+    playing: false,
+    finished: false,
+    fromEditor: false
+  };
+
+  var el = {
+    board: document.getElementById('board'),
+    timer: document.getElementById('timer'),
+    moves: document.getElementById('moves'),
+    best: document.getElementById('best'),
+    winMask: document.getElementById('winMask'),
+    winTime: document.getElementById('winTime'),
+    winBest: document.getElementById('winBest'),
+    recordNote: document.getElementById('recordNote'),
+    editor: document.getElementById('editor'),
+    editGrid: document.getElementById('editGrid'),
+    numPalette: document.getElementById('numPalette'),
+    editMsg: document.getElementById('editMsg')
+  };
+
+  /* ---------- 可解性判定（4×4：逆序数 + 空格所在行） ---------- */
+  function isSolvable(arr) {
+    var inv = 0;
+    for (var i = 0; i < SIZE; i++) {
+      if (arr[i] === 0) continue;
+      for (var j = i + 1; j < SIZE; j++) {
+        if (arr[j] !== 0 && arr[i] > arr[j]) inv++;
+      }
+    }
+    var blankRowFromBottom = N - Math.floor(arr.indexOf(0) / N);
+    // 宽度为偶数：逆序数为奇 + 空格行（从底部数）为偶 → 可解
+    return (inv % 2 === 0) === (blankRowFromBottom % 2 === 1);
+  }
+
+  function isSolved(arr) {
+    for (var i = 0; i < SIZE; i++) if (arr[i] !== SOLVED[i]) return false;
+    return true;
+  }
+
+  /* ---------- 计时 ---------- */
+  function fmt(ms) {
+    var t = Math.floor(ms / 100);
+    var d = t % 10;
+    var s = Math.floor(t / 10) % 60;
+    var m = Math.floor(t / 600);
+    return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s) + '.' + d;
+  }
+  function tick() {
+    el.timer.textContent = fmt(Date.now() - state.startTime);
+  }
+  function startTimer() {
+    if (state.playing) return;
+    state.playing = true;
+    state.startTime = Date.now();
+    state.timerId = setInterval(tick, 100);
+  }
+  function stopTimer() {
+    clearInterval(state.timerId);
+    state.playing = false;
+  }
+  function resetTimer() {
+    stopTimer();
+    state.startTime = null;
+    el.timer.textContent = '00:00.0';
+  }
+
+  /* ---------- 纪录 ---------- */
+  function loadBest() {
+    var v = localStorage.getItem('klotski4_best_ms');
+    if (v) { el.best.textContent = fmt(+v); el.best.dataset.ms = v; }
+    else { el.best.textContent = '—'; delete el.best.dataset.ms; }
+  }
+  function saveBest(ms) {
+    var old = localStorage.getItem('klotski4_best_ms');
+    if (!old || ms < +old) {
+      localStorage.setItem('klotski4_best_ms', ms);
+      loadBest();
+      return true;
+    }
+    return false;
+  }
+
+  /* ---------- 渲染 ---------- */
+  function render() {
+    el.board.innerHTML = '';
+    for (var i = 0; i < SIZE; i++) {
+      var v = state.board[i];
+      var t = document.createElement('div');
+      t.className = 'tile' + (v === 0 ? ' empty' : (v === i + 1 ? ' correct' : ''));
+      t.textContent = v === 0 ? '' : v;
+      t.dataset.idx = i;
+      el.board.appendChild(t);
+    }
+    el.moves.textContent = state.moves;
+  }
+
+  /* ---------- 交互 ---------- */
+  el.board.addEventListener('click', function (e) {
+    var tile = e.target.closest('.tile');
+    if (!tile || state.finished) return;
+    tryMove(+tile.dataset.idx);
+  });
+
+  function tryMove(idx) {
+    var v = state.board[idx];
+    if (v === 0) return;
+    var blank = state.board.indexOf(0);
+    var r1 = Math.floor(idx / N), c1 = idx % N;
+    var r2 = Math.floor(blank / N), c2 = blank % N;
+    var adjacent = Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
+    if (!adjacent) return;
+
+    state.board[blank] = v;
+    state.board[idx] = 0;
+    state.moves++;
+    startTimer();   // 第一次移动才开始计时
+    render();
+
+    if (isSolved(state.board)) finish();
+  }
+
+  function finish() {
+    stopTimer();
+    state.finished = true;
+    var ms = Date.now() - state.startTime;
+    el.timer.textContent = fmt(ms);
+    el.winTime.textContent = fmt(ms) + ' · ' + state.moves + ' 步';
+    var isBest = saveBest(ms);
+    el.winBest.textContent = isBest ? '★ 新纪录！' : '继续挑战更好成绩';
+    el.winMask.classList.add('show');
+  }
+
+  /* ---------- 随机打乱 ---------- */
+  function shuffle() {
+    var arr = SOLVED.slice();
+    do {
+      for (var i = SIZE - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      }
+    } while (isSolved(arr) || !isSolvable(arr));
+    state.board = arr;
+    state.moves = 0;
+    state.finished = false;
+    state.fromEditor = false;
+    resetTimer();
+    el.winMask.classList.remove('show');
+    render();
+  }
+
+  document.getElementById('btnShuffle').addEventListener('click', shuffle);
+  document.getElementById('btnAgain').addEventListener('click', shuffle);
+
+  /* ---------- 手动出题 ---------- */
+  var edit = { cells: new Array(SIZE).fill(null), selected: -1 };
+
+  function renderEditor() {
+    // 棋盘格
+    el.editGrid.innerHTML = '';
+    for (var i = 0; i < SIZE; i++) {
+      var c = document.createElement('div');
+      var v = edit.cells[i];
+      c.className = 'cell' + (v === 0 ? ' blank' : '') + (edit.selected === i ? ' selected' : '');
+      c.textContent = v === null ? '·' : (v === 0 ? '空' : v);
+      c.dataset.idx = i;
+      el.editGrid.appendChild(c);
+    }
+    // 数字键盘 0-15
+    el.numPalette.innerHTML = '';
+    for (var n = 0; n <= 15; n++) {
+      var b = document.createElement('div');
+      b.className = 'num' + (n === 0 ? ' zero' : '') + (edit.cells.indexOf(n) !== -1 ? ' used' : '');
+      b.textContent = n === 0 ? '空' : n;
+      b.dataset.n = n;
+      el.numPalette.appendChild(b);
+    }
+  }
+
+  el.editGrid.addEventListener('click', function (e) {
+    var c = e.target.closest('.cell');
+    if (c) { edit.selected = +c.dataset.idx; renderEditor(); }
+  });
+
+  el.numPalette.addEventListener('click', function (e) {
+    var b = e.target.closest('.num');
+    if (!b || edit.selected < 0) return;
+    var n = +b.dataset.n;
+    // 若该数字已用在其他格，先从原格移除
+    var exist = edit.cells.indexOf(n);
+    if (exist !== -1 && exist !== edit.selected) edit.cells[exist] = null;
+    edit.cells[edit.selected] = n;
+    // 自动跳到下一个空位
+    var next = -1;
+    for (var i = 1; i <= SIZE; i++) {
+      var k = (edit.selected + i) % SIZE;
+      if (edit.cells[k] === null) { next = k; break; }
+    }
+    edit.selected = next;
+    setEditMsg('', '');
+    renderEditor();
+  });
+
+  function setEditMsg(text, cls) {
+    el.editMsg.textContent = text;
+    el.editMsg.className = 'edit-msg' + (cls ? ' ' + cls : '');
+  }
+
+  document.getElementById('btnEditClear').addEventListener('click', function () {
+    edit.cells = new Array(SIZE).fill(null);
+    edit.selected = 0;
+    setEditMsg('', '');
+    renderEditor();
+  });
+
+  document.getElementById('btnEditSolved').addEventListener('click', function () {
+    edit.cells = SOLVED.slice();
+    edit.selected = -1;
+    setEditMsg('', '');
+    renderEditor();
+  });
+
+  document.getElementById('btnEditApply').addEventListener('click', function () {
+    if (edit.cells.some(function (v) { return v === null; })) {
+      setEditMsg('还有格子没填，请填满全部 16 格。', 'err');
+      return;
+    }
+    if (!isSolvable(edit.cells)) {
+      setEditMsg('这道题无解（逆序数不符合可解条件），请调整一下。', 'err');
+      return;
+    }
+    if (isSolved(edit.cells)) {
+      setEditMsg('这就是还原状态，随便走一步就能开始计时。', 'ok');
+    } else {
+      setEditMsg('出题成功，已应用到棋盘！', 'ok');
+    }
+    state.board = edit.cells.slice();
+    state.moves = 0;
+    state.finished = false;
+    state.fromEditor = true;
+    resetTimer();
+    el.winMask.classList.remove('show');
+    render();
+    // 出题后收起面板，回到游戏
+    setTimeout(function () {
+      el.editor.classList.remove('show');
+      document.getElementById('btnEditor').textContent = '手动出题';
+    }, 700);
+  });
+
+  document.getElementById('btnEditor').addEventListener('click', function () {
+    var show = !el.editor.classList.contains('show');
+    el.editor.classList.toggle('show', show);
+    document.getElementById('btnEditor').textContent = show ? '收起出题' : '手动出题';
+    if (show) {
+      // 从当前局面开始编辑，省得重填
+      edit.cells = state.board.slice();
+      edit.selected = -1;
+      setEditMsg('', '');
+      renderEditor();
+    }
+  });
+
+  /* ---------- 键盘方向键支持 ---------- */
+  document.addEventListener('keydown', function (e) {
+    if (state.finished || el.editor.classList.contains('show')) return;
+    var blank = state.board.indexOf(0);
+    var r = Math.floor(blank / N), c = blank % N;
+    var target = -1;
+    if (e.key === 'ArrowUp' && r < N - 1) target = blank + N;
+    else if (e.key === 'ArrowDown' && r > 0) target = blank - N;
+    else if (e.key === 'ArrowLeft' && c < N - 1) target = blank + 1;
+    else if (e.key === 'ArrowRight' && c > 0) target = blank - 1;
+    if (target >= 0) { e.preventDefault(); tryMove(target); }
+  });
+
+  /* ---------- 启动 ---------- */
+  loadBest();
+  el.recordNote.textContent = localStorage.getItem('klotski4_best_ms')
+    ? '纪录保存在本机浏览器中'
+    : '完成一局后，最佳时间会自动记录';
+  shuffle();
+})();
+</script>
+</body>
+</html>
